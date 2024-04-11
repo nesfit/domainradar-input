@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "prefilter"
+version = "0.1.0"
+description = ""
+authors = ["Ondrej Lichtner <ilichtner@fit.vut.cz>"]
+readme = "README.md"
+packages = [
+    { include = "feta_prefilter" },
+]
+
+[tool.poetry.scripts]
+prefilter = "feta_prefilter.main:main"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+elasticsearch = "^8.12.0"
+psycopg2 = "^2.9.9"
+
+[tool.poetry.group.dev.dependencies]
+black = "*"
+mypy = "*"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
