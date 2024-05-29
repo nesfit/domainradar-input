@@ -6,6 +6,8 @@ from feta_prefilter.Sources import source_classes
 from feta_prefilter.Filters import filter_classes
 from feta_prefilter.Outputs import output_classes
 
+from feta_prefilter.Filters.BaseFilter import FilterAction
+
 
 def main():
     config = read_config()
@@ -60,19 +62,37 @@ def main():
         outputs.append(output_obj)
 
     while True:
-        domains = []
+        domains = set()
         for s in sources:
-            domains.extend(s.collect())
+            domains.update(s.collect())
 
-        filter_results = []
+        filter_results = {}
         for f in filters:
-            filter_results.append(f.filter(domains))
+            filter_results[f] = f.filter(domains)
+        ###
+        # filter_results[f1] = [PASS, DROP, PASS...]
+        # filter_results[f2] = [DROP, PASS, PASS...]
 
-        filtered_domains = [
-            domain
-            for domain, *f_results in zip(domains, *filter_results)
-            if all(f_results)
-        ]
+        ###
+        # transform into:
+        # [
+        #   { domain, f_results= {f1: PASS, f2: DROP} }
+        #   { domain, f_results= {f1: DROP, f2: PASS} }
+        #   { domain, f_results= {f1: PASS, f2: PASS} }
+        # ]
+        filtered_domains = []
+        for i, domain in enumerate(domains):
+            domain_results = {f.__class__.__name__: filter_results[f][i] for f in filter_results.keys()}
+            max_domain_result = max(domain_results.values())
+            if max_domain_result == FilterAction.DROP:
+                continue
+            else:
+                filtered_domains.append(
+                    {
+                        "domain": domain,
+                        "f_results": domain_results
+                    }
+                )
 
         for o in outputs:
             o.output(filtered_domains)
@@ -94,6 +114,7 @@ def read_config() -> dict:
                 "type": "FileBlockListFilter",
                 "args": [],
                 "kwargs": {
+                    "filter_result_action": FilterAction.STORE,
                     "filename": "block.list",
                 },
             },
@@ -101,6 +122,7 @@ def read_config() -> dict:
                 "type": "FileBlockListFilter",
                 "args": [],
                 "kwargs": {
+                    "filter_result_action": FilterAction.DROP,
                     "filename": "block2.list",
                 },
             },
