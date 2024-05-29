@@ -86,11 +86,19 @@ def main():
             max_domain_result = max(domain_results.values())
             if max_domain_result == FilterAction.DROP:
                 continue
-            else:
+            elif max_domain_result == FilterAction.STORE:
                 filtered_domains.append(
                     {
                         "domain": domain,
                         "f_results": domain_results
+                    }
+                )
+            else:
+                #if all are PASS-analyze, then we don't need to store the json
+                filtered_domains.append(
+                    {
+                        "domain": domain,
+                        "f_results": [],
                     }
                 )
 
