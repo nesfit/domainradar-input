@@ -26,7 +26,10 @@ class PostgresOutput(BaseOutput):
                 for domain_info in domains:
                     domain = domain_info["domain"]
                     domain_data = domain_info["f_results"]
-                    str_list.append(f"('{domain}', NOW(), '{json.dumps(domain_data)}')")
+                    if domain_data:
+                        str_list.append(f"('{domain}', NOW(), '{json.dumps(domain_data)}')")
+                    else:
+                        str_list.append(f"('{domain}', NOW(), NULL)")
 
                 domains_to_insert = ",\n".join(str_list)
                 command = f"""

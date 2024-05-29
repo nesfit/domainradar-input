@@ -98,7 +98,7 @@ def main():
                 filtered_domains.append(
                     {
                         "domain": domain,
-                        "f_results": [],
+                        "f_results": {},
                     }
                 )
 
