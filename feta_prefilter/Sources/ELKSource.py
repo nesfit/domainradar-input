@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from elasticsearch import Elasticsearch
 from feta_prefilter.Sources.BaseSource import BaseSource
 
+logger = logging.getLogger(__name__)
 
 class ELKSource(BaseSource):
     def __init__(self, elk_url: str):
@@ -12,7 +13,7 @@ class ELKSource(BaseSource):
 
     def collect(self) -> list[str]:
         last_1_day = datetime.utcnow() - timedelta(days=1)
-        logging.debug("START", datetime.utcnow())
+        logger.debug("START", datetime.utcnow())
         results = self.es.search(
             index="logstash-*",
             query={
@@ -32,10 +33,10 @@ class ELKSource(BaseSource):
             search_after = self._latest_sort,
             size=10000,
         )
-        logging.debug("FINISH", datetime.utcnow())
+        logger.debug("FINISH", datetime.utcnow())
         timestamp = None
         for hit in results.body['hits']['hits']:
             self._latest_sort = hit['sort']
             timestamp = hit['_source']['@timestamp']
             yield hit['_source']['dns']['rrname']
-        logging.debug("Last record from elk from this call", timestamp)
+        logger.debug("Last record from elk from this call", timestamp)

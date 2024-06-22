@@ -8,6 +8,7 @@ from feta_prefilter.Outputs import output_classes
 
 from feta_prefilter.Filters.BaseFilter import FilterAction
 
+logger = logging.getLogger(__name__)
 
 def main():
     config = read_config()
@@ -17,14 +18,14 @@ def main():
     for source in config["sources"]:
         source_cls_name = source["type"]
         if source_cls_name not in source_classes:
-            logging.error(f"Unknown source class type {source_cls_name}")
+            logger.error(f"Unknown source class type {source_cls_name}")
             continue
 
         try:
             source_cls = source_classes[source_cls_name]
             source_obj = source_cls(*source["args"], **source["kwargs"])
         except:
-            logging.exception(f"Failed source initialization")
+            logger.exception(f"Failed source initialization")
             continue
 
         sources.append(source_obj)
@@ -33,14 +34,14 @@ def main():
     for f in config["filters"]:
         filter_cls_name = f["type"]
         if filter_cls_name not in filter_classes:
-            logging.error(f"Unknown filter class type {filter_cls_name}")
+            logger.error(f"Unknown filter class type {filter_cls_name}")
             continue
 
         try:
             filter_cls = filter_classes[filter_cls_name]
             filter_obj = filter_cls(*f["args"], **f["kwargs"])
         except:
-            logging.exception(f"Failed filter initialization")
+            logger.exception(f"Failed filter initialization")
             continue
 
         filters.append(filter_obj)
@@ -49,14 +50,14 @@ def main():
     for output in config["outputs"]:
         output_cls_name = output["type"]
         if output_cls_name not in output_classes:
-            logging.error(f"Unknown output class type {output_cls_name}")
+            logger.error(f"Unknown output class type {output_cls_name}")
             continue
 
         try:
             output_cls = output_classes[output_cls_name]
             output_obj = output_cls(*output["args"], **output["kwargs"])
         except:
-            logging.exception(f"Failed output initialization")
+            logger.exception(f"Failed output initialization")
             continue
 
         outputs.append(output_obj)

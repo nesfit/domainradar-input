@@ -5,6 +5,7 @@ import psycopg2
 
 from feta_prefilter.Outputs.BaseOutput import BaseOutput
 
+logger = logging.getLogger(__name__)
 
 class PostgresOutput(BaseOutput):
     def __init__(
@@ -47,5 +48,5 @@ class PostgresOutput(BaseOutput):
                     curr.execute(command)
                     ret = [row[1] for row in curr.fetchall()]
         except Exception:
-            logging.exception("Exception raised while sending data to postgres")
+            logger.exception("Exception raised while sending data to postgres")
         return ret
