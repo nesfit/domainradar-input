@@ -37,12 +37,12 @@ class PostgresOutput(BaseOutput):
 
                     domains_to_insert = ",\n".join(str_list)
                     command = f"""
-                    INSERT INTO "domains_input" ("domain", "added", "filter_output")
+                    INSERT INTO "domains_input" ("domain", "last_seen", "filter_output")
                     VALUES
                         {domains_to_insert}
                     ON CONFLICT ("domain")
                     DO UPDATE SET
-                        added = NOW()
+                        last_seen = NOW()
                     RETURNING *;
                     """
                     curr.execute(command)
