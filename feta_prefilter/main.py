@@ -81,13 +81,39 @@ def init_config() -> dict:
         },
     }
 
-    kafka_consumer = config["kafka_consumer"] = KafkaConsumer(
-        "configuration_change_requests",
-        client_id="loader-consumer",
+    init_consumer = KafkaConsumer(
+        "configuration_states",
+        client_id="loader-consumer-init",
         bootstrap_servers=config["kafka_broker"],
         security_protocol="SSL",
         ssl_context=make_ssl_context(Path(config["kafka_secrets_dir"])),
         auto_offset_reset="earliest",
+        consumer_timeout_ms=500,
+    )
+    inited = False
+    for msg in init_consumer:
+        logger.debug(msg)
+        if msg.key.decode() != "loader":
+            continue
+
+        state = json.loads(msg.value)
+        if not state["success"]:
+            continue
+        logger.info(state)
+        config["dynamic_config"] = state["currentConfig"]
+        inited = True
+
+    if not inited:
+        # if we didn't get any config messages from kafka we send the empty default
+        notify_config_change(True, config)
+
+    kafka_consumer = config["kafka_consumer"] = KafkaConsumer(
+        "configuration_change_requests",
+        client_id="loader-consumer",
+        group_id="loader-consumer",
+        bootstrap_servers=config["kafka_broker"],
+        security_protocol="SSL",
+        ssl_context=make_ssl_context(Path(config["kafka_secrets_dir"])),
         consumer_timeout_ms=500,
     )
 
@@ -98,9 +124,7 @@ def init_config() -> dict:
         ssl_context=make_ssl_context(Path(config["kafka_secrets_dir"])),
     )
 
-    if not update_config(config):
-        # if we didn't get any config messages from kafka we send the empty default
-        notify_config_change(True, config)
+    update_config(config)
     return config
 
 
