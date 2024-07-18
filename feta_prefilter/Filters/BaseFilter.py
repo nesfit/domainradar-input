@@ -6,7 +6,8 @@ class FilterAction(IntEnum):
     STORE = 2
 
 class BaseFilter:
-    def __init__(self, filter_result_action=FilterAction.DROP):
+    def __init__(self, filter_name: str, filter_result_action=FilterAction.DROP):
+        self.filter_name = filter_name
         self.filter_result_action = filter_result_action
 
     def filter(self, domains: list[str]) -> list[FilterAction]:

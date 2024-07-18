@@ -3,8 +3,8 @@ from feta_prefilter.Filters.BaseFilter import BaseFilter
 
 
 class FileBlockListFilter(BaseFilter):
-    def __init__(self, filter_result_action=FilterAction.DROP, filename=""):
-        super().__init__(filter_result_action)
+    def __init__(self, filter_name:str, filter_result_action=FilterAction.DROP, filename=""):
+        super().__init__(filter_name, filter_result_action)
 
         with open(filename) as f:
             self.block_domains = [l.strip() for l in f.readlines()]

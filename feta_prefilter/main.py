@@ -49,7 +49,7 @@ def main():
         filtered_domains = []
         for i, domain in enumerate(domains):
             domain_results = {
-                f.__class__.__name__: filter_results[f][i]
+                f.filter_name: filter_results[f][i]
                 for f in filter_results.keys()
             }
             max_domain_result = max(domain_results.values())
