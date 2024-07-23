@@ -117,7 +117,7 @@ def init_config() -> dict:
     )
 
     if not inited:
-        # if we didn't get any config messages from kafka we send the empty default
+        # if we didn't get any config messages from kafka (or they were invalid) we send the empty default
         notify_config_change(True, config)
 
     config["kafka_consumer"] = KafkaConsumer(
@@ -145,7 +145,8 @@ def update_config(config: dict) -> bool:
                 continue
 
             change_request = json.loads(msg.value)
-        except (AttributeError, UnicodeDecodeError, JSONDecodeError):
+        except (AttributeError, UnicodeDecodeError, JSONDecodeError) as e:
+            notify_config_change(False, config, str(e))
             continue
 
         logger.info(f"Change request received: {change_request}")
@@ -161,12 +162,12 @@ def update_config(config: dict) -> bool:
     return changed
 
 
-def notify_config_change(success: bool, config: dict):
+def notify_config_change(success: bool, config: dict, message: str = None):
     producer = config["kafka_producer"]
     msg = {
         "success": success,
         "errors": None,
-        "message": None,
+        "message": message,
         "currentConfig": config["dynamic_config"],
     }
 
