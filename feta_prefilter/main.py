@@ -103,11 +103,18 @@ def init_config() -> dict:
         config["dynamic_config"] = state["currentConfig"]
         inited = True
 
+    config["kafka_producer"] = KafkaProducer(
+        client_id="loader-producer",
+        bootstrap_servers=config["kafka_broker"],
+        security_protocol="SSL",
+        ssl_context=make_ssl_context(Path(config["kafka_secrets_dir"])),
+    )
+
     if not inited:
         # if we didn't get any config messages from kafka we send the empty default
         notify_config_change(True, config)
 
-    kafka_consumer = config["kafka_consumer"] = KafkaConsumer(
+    config["kafka_consumer"] = KafkaConsumer(
         "configuration_change_requests",
         client_id="loader-consumer",
         group_id="loader-consumer",
@@ -115,13 +122,6 @@ def init_config() -> dict:
         security_protocol="SSL",
         ssl_context=make_ssl_context(Path(config["kafka_secrets_dir"])),
         consumer_timeout_ms=500,
-    )
-
-    config["kafka_producer"] = KafkaProducer(
-        client_id="loader-producer",
-        bootstrap_servers=config["kafka_broker"],
-        security_protocol="SSL",
-        ssl_context=make_ssl_context(Path(config["kafka_secrets_dir"])),
     )
 
     update_config(config)
