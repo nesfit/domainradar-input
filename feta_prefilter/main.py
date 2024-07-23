@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 from pprint import pprint
 import json
+from json import JSONDecodeError
 
 from kafka import KafkaConsumer, KafkaProducer
 
@@ -93,10 +94,15 @@ def init_config() -> dict:
     inited = False
     for msg in init_consumer:
         logger.debug(msg)
-        if msg.key.decode() != "loader":
+
+        try:
+            if msg.key.decode() != "loader":
+                continue
+
+            state = json.loads(msg.value)
+        except (AttributeError, UnicodeDecodeError, JSONDecodeError):
             continue
 
-        state = json.loads(msg.value)
         if not state["success"]:
             continue
         logger.info(state)
@@ -133,9 +139,15 @@ def update_config(config: dict) -> bool:
     consumer = config["kafka_consumer"]
     for msg in consumer:
         logger.debug(msg)
-        if msg.key.decode() != "loader":
+
+        try:
+            if msg.key.decode() != "loader":
+                continue
+
+            change_request = json.loads(msg.value)
+        except (AttributeError, UnicodeDecodeError, JSONDecodeError):
             continue
-        change_request = json.loads(msg.value)
+
         logger.info(f"Change request received: {change_request}")
         if validate_dynamic_config(change_request):
             config["dynamic_config"] = change_request
