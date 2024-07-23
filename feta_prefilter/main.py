@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 from pprint import pprint
 import json
+from json import JSONDecodeError
 
 from kafka import KafkaConsumer, KafkaProducer
 
@@ -93,21 +94,33 @@ def init_config() -> dict:
     inited = False
     for msg in init_consumer:
         logger.debug(msg)
-        if msg.key.decode() != "loader":
+
+        try:
+            if msg.key.decode() != "loader":
+                continue
+
+            state = json.loads(msg.value)
+        except (AttributeError, UnicodeDecodeError, JSONDecodeError):
             continue
 
-        state = json.loads(msg.value)
         if not state["success"]:
             continue
         logger.info(state)
         config["dynamic_config"] = state["currentConfig"]
         inited = True
 
+    config["kafka_producer"] = KafkaProducer(
+        client_id="loader-producer",
+        bootstrap_servers=config["kafka_broker"],
+        security_protocol="SSL",
+        ssl_context=make_ssl_context(Path(config["kafka_secrets_dir"])),
+    )
+
     if not inited:
-        # if we didn't get any config messages from kafka we send the empty default
+        # if we didn't get any config messages from kafka (or they were invalid) we send the empty default
         notify_config_change(True, config)
 
-    kafka_consumer = config["kafka_consumer"] = KafkaConsumer(
+    config["kafka_consumer"] = KafkaConsumer(
         "configuration_change_requests",
         client_id="loader-consumer",
         group_id="loader-consumer",
@@ -115,13 +128,6 @@ def init_config() -> dict:
         security_protocol="SSL",
         ssl_context=make_ssl_context(Path(config["kafka_secrets_dir"])),
         consumer_timeout_ms=500,
-    )
-
-    config["kafka_producer"] = KafkaProducer(
-        client_id="loader-producer",
-        bootstrap_servers=config["kafka_broker"],
-        security_protocol="SSL",
-        ssl_context=make_ssl_context(Path(config["kafka_secrets_dir"])),
     )
 
     update_config(config)
@@ -133,9 +139,23 @@ def update_config(config: dict) -> bool:
     consumer = config["kafka_consumer"]
     for msg in consumer:
         logger.debug(msg)
-        if msg.key.decode() != "loader":
+        if msg.key is None:
             continue
-        change_request = json.loads(msg.value)
+
+        try:
+            if msg.key.decode() != "loader":
+                continue
+        except UnicodeDecodeError:
+            logger.debug("Cannot decode message key")
+            continue
+
+        try:
+            change_request = json.loads(msg.value)
+        except JSONDecodeError as e:
+            logger.debug(f"Cannot decode message JSON value")
+            notify_config_change(False, config, str(e))
+            continue
+
         logger.info(f"Change request received: {change_request}")
         if validate_dynamic_config(change_request):
             config["dynamic_config"] = change_request
@@ -149,12 +169,12 @@ def update_config(config: dict) -> bool:
     return changed
 
 
-def notify_config_change(success: bool, config: dict):
+def notify_config_change(success: bool, config: dict, message: str = None):
     producer = config["kafka_producer"]
     msg = {
         "success": success,
         "errors": None,
-        "message": None,
+        "message": message,
         "currentConfig": config["dynamic_config"],
     }
 
