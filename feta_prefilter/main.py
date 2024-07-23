@@ -139,13 +139,20 @@ def update_config(config: dict) -> bool:
     consumer = config["kafka_consumer"]
     for msg in consumer:
         logger.debug(msg)
+        if msg.key is None:
+            continue
 
         try:
             if msg.key.decode() != "loader":
                 continue
+        except UnicodeDecodeError:
+            logger.debug("Cannot decode message key")
+            continue
 
+        try:
             change_request = json.loads(msg.value)
-        except (AttributeError, UnicodeDecodeError, JSONDecodeError) as e:
+        except JSONDecodeError as e:
+            logger.debug(f"Cannot decode message JSON value")
             notify_config_change(False, config, str(e))
             continue
 
