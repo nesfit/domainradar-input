@@ -1,7 +1,9 @@
-from .FileSource import FileSource
+from .SimpleFileSource import SimpleFileSource
+from .StreamingFileSource import StreamingFileSource
 from .ELKSource import ELKSource
 
 source_classes = {
-    'FileSource': FileSource,
+    'SimpleFileSource': SimpleFileSource,
+    'StreamingFileSource': StreamingFileSource,
     'ELKSource': ELKSource,
 }
