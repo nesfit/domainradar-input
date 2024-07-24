@@ -32,6 +32,8 @@ class PostgresOutput(BaseOutput):
                     ret = [row[1] for row in curr.fetchall()]
         except Exception:
             logger.exception("Exception raised while sending data to postgres")
+            logger.debug(f"Postgres command: {command}")
+            logger.debug(f"Postgres command params: {param_list}")
         return ret
 
     def build_query(self, domains: list[dict]) -> tuple[str, list]:
