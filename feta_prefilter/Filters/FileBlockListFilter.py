@@ -13,13 +13,13 @@ class FileBlockListFilter(BaseFilter):
         with open(filename) as f:
             for domain in f.readlines():
                 reversed_domain = '.'.join(reversed(domain.strip().split('.')))
-                self.suffix_trie.add(reversed_domain)
+                self.suffix_trie.add(reversed_domain.lower())
 
     def filter(self, domains: list[str]) -> list[FilterAction]:
         res = []
         for domain in domains:
             reversed_domain = '.'.join(reversed(domain.strip().split('.')))
-            if reversed_domain in self.suffix_trie:
+            if reversed_domain.lower() in self.suffix_trie:
                 res.append(self.filter_result_action)
             else:
                 res.append(FilterAction.PASS)
