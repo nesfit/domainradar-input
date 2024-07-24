@@ -31,7 +31,7 @@ def main():
 
         domains = set()
         for s in sources:
-            domains.update(s.collect())
+            domains.update(d.lower() for d in s.collect())
 
         filter_results = {}
         for f in filters:
