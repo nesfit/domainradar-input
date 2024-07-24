@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 def main():
     config = init_config()
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=os.environ.get("DOMAINRADAR_LOG_LEVEL", "INFO"))
 
     sources, filters, outputs = create_app(config)
 
