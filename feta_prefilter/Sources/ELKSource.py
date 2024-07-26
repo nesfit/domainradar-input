@@ -14,7 +14,7 @@ class ELKSource(BaseSource):
 
     def collect(self) -> list[str]:
         last_1_day = datetime.utcnow() - timedelta(days=1)
-        logger.debug("START", datetime.utcnow())
+        logger.debug("START %s", datetime.utcnow())
         results = self.es.search(
             index="logstash-*",
             query={
@@ -42,10 +42,10 @@ class ELKSource(BaseSource):
             search_after=self._latest_sort,
             size=10000,
         )
-        logger.debug("FINISH", datetime.utcnow())
+        logger.debug("FINISH %s", datetime.utcnow())
         timestamp = None
         for hit in results.body["hits"]["hits"]:
             self._latest_sort = hit["sort"]
             timestamp = hit["_source"]["@timestamp"]
             yield hit["_source"]["dns"]["rrname"]
-        logger.debug("Last record from elk from this call", timestamp)
+        logger.debug("Last record from elk from this call %s", timestamp)
