@@ -18,6 +18,7 @@ psycopg2 = "^2.9.9"
 kafka-python-ng = "^2.2.2"
 pygtrie = "^2.5.0"
 pymisp = "^2.4.195"
+validators = "^0.34.0"
 
 [tool.poetry.group.dev.dependencies]
 black = "*"

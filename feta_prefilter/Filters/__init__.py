@@ -1,11 +1,11 @@
 from .FileBlockListFilter import FileBlockListFilter
 from .MISPFilter import MISPFilter
-from .StarFilter import StarFilter
+from .ValidDomainFilter import ValidDomainFilter
 from .RandomDROPFilter import RandomDROPFilter
 
 filter_classes = {
     'FileBlockListFilter': FileBlockListFilter,
     'MISPFilter': MISPFilter,
-    'StarFilter': StarFilter,
+    'ValidDomainFilter': ValidDomainFilter,
     'RandomDROPFilter': RandomDROPFilter,
 }
