@@ -40,7 +40,7 @@ class ELKSource(BaseSource):
                 {"timestamp": "asc"},
             ],
             search_after=self._latest_sort,
-            size=10000,
+            size=10000, # 10k is max size as per ELK spec
         )
         logger.debug("FINISH %s", datetime.utcnow())
         timestamp = None
