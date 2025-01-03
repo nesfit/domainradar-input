@@ -1,0 +1,76 @@
+{
+    "sources": [
+        {
+            "type": "ELKSource",
+            "args": [],
+            "kwargs": {
+                "elk_url": "http://1.2.3.4:9200/"
+            }
+        },
+        {
+            "type": "MISPSource",
+            "args": [],
+            "kwargs": {
+                "misp_url": "https://example.com/",
+                "misp_key": "password",
+                "misp_feed_eventids": []
+            }
+        }
+    ],
+    "filters": [
+        {
+            "type": "FileBlockListFilter",
+            "args": [],
+            "kwargs": {
+                "filter_result_action": 2,
+                "filename": "top100.blocklist"
+            }
+        },
+        {
+            "type": "MISPFilter",
+            "args": [],
+            "kwargs": {
+                "filter_name": "misp_bad_list",
+                "filter_result_action": 1,
+                "misp_url": "https://example.com/",
+                "misp_key": "password",
+                "misp_feed_eventids": [
+                    1
+                ]
+            }
+        },
+        {
+            "type": "CustomPostgresFilter",
+            "args": [],
+            "kwargs": {
+                "filter_name": "custom_filter",
+                "filter_result_action": 2,
+                "host": "postgres",
+                "port": 5432,
+                "username": "prefilter",
+                "password": "password",
+                "database": "domainradar",
+                "filter_table_name": "Custom_Prefilter",
+                "domains_table_name": "Custom_Prefiltered_Domain"
+            }
+        }
+    ],
+    "outputs": [
+        {
+            "type": "StdOutput",
+            "args": [],
+            "kwargs": {}
+        },
+        {
+            "type": "PostgresOutput",
+            "args": [],
+            "kwargs": {
+                "host": "postgres",
+                "port": 5432,
+                "username": "prefilter",
+                "password": "password",
+                "database": "domainradar"
+            }
+        }
+    ]
+}
