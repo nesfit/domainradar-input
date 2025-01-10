@@ -6,6 +6,7 @@ from pathlib import Path
 from pprint import pprint
 import json
 from json import JSONDecodeError
+import multiprocessing
 
 from kafka import KafkaConsumer, KafkaProducer
 
@@ -18,24 +19,47 @@ from feta_prefilter.Filters.BaseFilter import FilterAction
 
 logger = logging.getLogger(__name__)
 
+MAX_FILTER_TIMEOUT = 5
 
 def main():
     config = init_config()
     logging.basicConfig(level=os.environ.get("DOMAINRADAR_LOG_LEVEL", "INFO"))
 
-    sources, filters, outputs = create_app(config)
+    processes, source_outputs, filter_inputs, filter_outputs, output_inputs = create_app(config)
+    for p in processes:
+        logger.info(f"Starting process {p} of new app")
+        p.start()
 
     while True:
         if update_config(config):
-            sources, filters, outputs = create_app(config)
+            logger.info("New config received, recreating app")
+            new_processes, source_outputs, filter_inputs, filter_outputs, output_inputs = create_app(config)
+
+            for p in processes:
+                logger.debug("Killing old processes")
+                p.kill()
+
+            for p in new_processes:
+                logger.info(f"Starting process {p} of new app")
+                p.start()
+            processes = new_processes
 
         domains = set()
-        for s in sources:
-            domains.update(d.lower() for d in s.collect())
+        for conn in source_outputs:
+            if conn.poll():
+                domains.update(d.lower() for d in conn.recv())
+        logger.debug(f"domains from inputs: {domains}")
+
+        if not domains:
+            continue
+
+        for conn in filter_inputs:
+            conn.send(domains)
 
         filter_results = {}
-        for f in filters:
-            filter_results[f] = f.filter(domains)
+        for f_name, conn in filter_outputs:
+            if conn.poll(MAX_FILTER_TIMEOUT):
+                filter_results[f_name] = conn.recv()
         ###
         # filter_results[f1] = [PASS, DROP, PASS...]
         # filter_results[f2] = [DROP, PASS, PASS...]
@@ -50,8 +74,7 @@ def main():
         filtered_domains = []
         for i, domain in enumerate(domains):
             domain_results = {
-                f.filter_name: filter_results[f][i]
-                for f in filter_results.keys()
+                f_name: filter_results[f_name][i] for f_name in filter_results.keys()
             }
             max_domain_result = max(domain_results.values())
             if max_domain_result == FilterAction.DROP:
@@ -67,8 +90,8 @@ def main():
                     }
                 )
 
-        for o in outputs:
-            o.output(filtered_domains)
+        for conn in output_inputs:
+            conn.send(filtered_domains)
 
 
 def init_config() -> dict:
@@ -184,22 +207,76 @@ def notify_config_change(success: bool, config: dict, message: str = None):
     return
 
 
+def s_process(conn, source_cls_name, *args, **kwargs):
+    try:
+        source_cls = source_classes[source_cls_name]
+        source_obj = source_cls(*args, **kwargs)
+    except:
+        logger.exception(f"Failed source initialization")
+
+    while True:
+        try:
+            res = list(source_obj.collect())
+            if res:
+                conn.send(res)
+        except:
+            logger.exception("Source process problem")
+
+
+def f_process(conn, filter_cls_name, *args, **kwargs):
+    try:
+        filter_cls = filter_classes[filter_cls_name]
+        filter_obj = filter_cls(*args, **kwargs)
+    except:
+        logger.exception("Failed filter initialization")
+
+    while True:
+        domains = conn.recv()
+        try:
+            filter_results = list(filter_obj.filter(domains))
+            if filter_results:
+                conn.send(filter_results)
+        except:
+            logger.exception("Filter process problem")
+
+
+def o_process(conn, output_cls_name, *args, **kwargs):
+    try:
+        output_cls = output_classes[output_cls_name]
+        output_obj = output_cls(*args, **kwargs)
+    except:
+        logger.exception(f"Failed output initialization")
+
+    while True:
+        filtered_domains = conn.recv()
+        try:
+            output_obj.output(filtered_domains)
+        except:
+            logger.exception("Output process problem")
+
+
 def create_app(config: dict):
-    sources = []
+    processes = []
+    source_outputs = []
+    filter_inputs = []
+    filter_outputs = []
+    output_inputs = []
+
     for source in config["dynamic_config"]["sources"]:
         source_cls_name = source["type"]
         if source_cls_name not in source_classes:
             logger.error(f"Unknown source class type {source_cls_name}")
             continue
 
-        try:
-            source_cls = source_classes[source_cls_name]
-            source_obj = source_cls(*source["args"], **source["kwargs"])
-        except:
-            logger.exception(f"Failed source initialization")
-            continue
-
-        sources.append(source_obj)
+        conn1, conn2 = multiprocessing.Pipe()
+        logger.debug(f"Creating process for source {source}")
+        process = multiprocessing.Process(
+            target=s_process,
+            args=[conn2, source_cls_name, *source["args"]],
+            kwargs=source["kwargs"],
+        )
+        processes.append(process)
+        source_outputs.append(conn1)
 
     filters = []
     for f in config["dynamic_config"]["filters"]:
@@ -208,14 +285,16 @@ def create_app(config: dict):
             logger.error(f"Unknown filter class type {filter_cls_name}")
             continue
 
-        try:
-            filter_cls = filter_classes[filter_cls_name]
-            filter_obj = filter_cls(*f["args"], **f["kwargs"])
-        except:
-            logger.exception(f"Failed filter initialization")
-            continue
-
-        filters.append(filter_obj)
+        conn1, conn2 = multiprocessing.Pipe()
+        logger.debug(f"Creating process for filter {f}")
+        process = multiprocessing.Process(
+            target=f_process,
+            args=[conn2, filter_cls_name, *f["args"]],
+            kwargs=f["kwargs"],
+        )
+        processes.append(process)
+        filter_inputs.append(conn1)
+        filter_outputs.append((f["kwargs"]["filter_name"], conn1))
 
     outputs = []
     for output in config["dynamic_config"]["outputs"]:
@@ -224,15 +303,17 @@ def create_app(config: dict):
             logger.error(f"Unknown output class type {output_cls_name}")
             continue
 
-        try:
-            output_cls = output_classes[output_cls_name]
-            output_obj = output_cls(*output["args"], **output["kwargs"])
-        except:
-            logger.exception(f"Failed output initialization")
-            continue
+        conn1, conn2 = multiprocessing.Pipe()
+        logger.debug(f"Creating process for output {output}")
+        process = multiprocessing.Process(
+            target=o_process,
+            args=[conn2, output_cls_name, *output["args"]],
+            kwargs=output["kwargs"],
+        )
+        processes.append(process)
+        output_inputs.append(conn1)
 
-        outputs.append(output_obj)
-    return sources, filters, outputs
+    return processes, source_outputs, filter_inputs, filter_outputs, output_inputs
 
 
 def validate_dynamic_config(change_request):
