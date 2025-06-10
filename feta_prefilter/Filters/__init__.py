@@ -1,3 +1,4 @@
+from .CloudflareTopFilter import CloudflareTopFilter
 from .FileBlockListFilter import FileBlockListFilter
 from .MISPFilter import MISPFilter
 from .ValidDomainFilter import ValidDomainFilter
@@ -10,4 +11,5 @@ filter_classes = {
     'ValidDomainFilter': ValidDomainFilter,
     'RandomDROPFilter': RandomDROPFilter,
     'CustomPostgresFilter': CustomPostgresFilter,
+    'CloudflareTopFilter': CloudflareTopFilter
 }
