@@ -19,6 +19,7 @@ kafka-python = {extras = ["zstd"], version = "^2.2.11"}
 pygtrie = "^2.5.0"
 pymisp = "^2.4.195"
 validators = "^0.34.0"
+requests = "^2.32.4"
 
 [tool.poetry.group.dev.dependencies]
 black = "*"
