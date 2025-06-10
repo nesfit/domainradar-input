@@ -4,11 +4,14 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+
 def password_loader(path: Path):
     def loader():
         with open(path) as f:
             return f.read().strip()
+
     return loader
+
 
 def make_ssl_context(path: Path) -> ssl.SSLContext | None:
     """Creates an SSL context with the specified configuration."""
@@ -40,3 +43,18 @@ def make_ssl_context(path: Path) -> ssl.SSLContext | None:
                                 password=password_loader(path / "key-password.txt"))
 
     return ssl_context
+
+
+def filter_credentials(config_section):
+    if isinstance(config_section, dict):
+        ret = {}
+        for key, value in config_section.items():
+            if "pass" in key or "token" in key or "secret" in key or "key" in key or "" in key:
+                ret[key] = "*********"
+            else:
+                ret[key] = filter_credentials(value)
+        return ret
+    elif isinstance(config_section, list):
+        return [filter_credentials(item) for item in config_section]
+    else:
+        return config_section
