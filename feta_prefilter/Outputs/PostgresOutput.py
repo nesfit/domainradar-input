@@ -8,9 +8,10 @@ from feta_prefilter.Outputs.BaseOutput import BaseOutput
 
 logger = logging.getLogger(__name__)
 
+
 class PostgresOutput(BaseOutput):
     def __init__(
-        self, host: str, port: int, username: str, password: str, database: str
+            self, host: str, port: int, username: str, password: str, database: str
     ):
         self.db_connection_info = {
             "database": database,
@@ -24,16 +25,19 @@ class PostgresOutput(BaseOutput):
         ret = []
         if not domains:
             return ret
+        command, param_list = None, None
         try:
             command, param_list = self.build_query(domains)
             with psycopg2.connect(**self.db_connection_info) as conn:
+                logger.debug("Connected")
                 with conn.cursor() as curr:
                     curr.execute(command, param_list)
+                    logger.debug("Executed %s", command)
                     ret = [row[1] for row in curr.fetchall()]
         except Exception:
             logger.exception("Exception raised while sending data to postgres")
-            logger.error(f"Postgres command: {command}")
-            logger.error(f"Postgres command params: {param_list}")
+            logger.error(f"Postgres command: %s", command)
+            logger.error(f"Postgres command params: %s", param_list)
         return ret
 
     def build_query(self, domains: list[dict]) -> tuple[str, list]:

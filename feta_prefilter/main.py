@@ -1,20 +1,16 @@
-import os
-import sys
-import argparse
-import logging
-from pathlib import Path
-from pprint import pprint
 import json
+import logging
+import os
 from json import JSONDecodeError
+from pathlib import Path
 
 from kafka import KafkaConsumer, KafkaProducer
 
-from feta_prefilter.utils import make_ssl_context
-from feta_prefilter.Sources import source_classes
 from feta_prefilter.Filters import filter_classes
-from feta_prefilter.Outputs import output_classes
-
 from feta_prefilter.Filters.BaseFilter import FilterAction
+from feta_prefilter.Outputs import output_classes
+from feta_prefilter.Sources import source_classes
+from feta_prefilter.utils import make_ssl_context, filter_credentials
 
 logger = logging.getLogger(__name__)
 
@@ -185,53 +181,49 @@ def notify_config_change(success: bool, config: dict, message: str = None):
 
 
 def create_app(config: dict):
-    sources = []
-    for source in config["dynamic_config"]["sources"]:
-        source_cls_name = source["type"]
-        if source_cls_name not in source_classes:
-            logger.error(f"Unknown source class type {source_cls_name}")
-            continue
+    def _init_block(blocks, registry, label: str):
+        items = []
+        for blk in blocks:
+            cls_name = blk["type"]
+            if cls_name not in registry:
+                logger.error(f"Unknown {label} class type {cls_name}")
+                continue
 
-        try:
-            source_cls = source_classes[source_cls_name]
-            source_obj = source_cls(*source["args"], **source["kwargs"])
-        except:
-            logger.exception(f"Failed source initialization")
-            continue
+            try:
+                cls = registry[cls_name]
+                obj = cls(*blk["args"], **blk["kwargs"])
+            except Exception as e:
+                logger.exception(f"Failed {label} initialization", exc_info=e)
+                continue
 
-        sources.append(source_obj)
+            name = getattr(obj, f"{label}_name", "unnamed")
+            logger.info("%s initialized: %s (%s)", label, cls_name, name)
 
-    filters = []
-    for f in config["dynamic_config"]["filters"]:
-        filter_cls_name = f["type"]
-        if filter_cls_name not in filter_classes:
-            logger.error(f"Unknown filter class type {filter_cls_name}")
-            continue
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("%s args: %s", label, filter_credentials(blk["args"]))
+                logger.debug("%s kwargs: %s", label, filter_credentials(blk["kwargs"]))
 
-        try:
-            filter_cls = filter_classes[filter_cls_name]
-            filter_obj = filter_cls(*f["args"], **f["kwargs"])
-        except:
-            logger.exception(f"Failed filter initialization")
-            continue
+            items.append(obj)
+        return items
 
-        filters.append(filter_obj)
+    sources = _init_block(
+        config["dynamic_config"]["sources"],
+        source_classes,
+        "source"
+    )
 
-    outputs = []
-    for output in config["dynamic_config"]["outputs"]:
-        output_cls_name = output["type"]
-        if output_cls_name not in output_classes:
-            logger.error(f"Unknown output class type {output_cls_name}")
-            continue
+    filters = _init_block(
+        config["dynamic_config"]["filters"],
+        filter_classes,
+        "filter"
+    )
 
-        try:
-            output_cls = output_classes[output_cls_name]
-            output_obj = output_cls(*output["args"], **output["kwargs"])
-        except:
-            logger.exception(f"Failed output initialization")
-            continue
+    outputs = _init_block(
+        config["dynamic_config"]["outputs"],
+        output_classes,
+        "output"
+    )
 
-        outputs.append(output_obj)
     return sources, filters, outputs
 
 
