@@ -13,7 +13,7 @@ def password_loader(path: Path):
     return loader
 
 
-def make_ssl_context(path: Path) -> ssl.SSLContext | None:
+def make_ssl_context(ssl_config: dict[str, str]) -> ssl.SSLContext | None:
     """Creates an SSL context with the specified configuration."""
     logger.info("Loading SSL configuration")
 
@@ -24,7 +24,7 @@ def make_ssl_context(path: Path) -> ssl.SSLContext | None:
     ssl_context.check_hostname = False
     ssl_context.verify_mode = ssl.CERT_REQUIRED
 
-    cacert_path = path / "ca-cert.pem"
+    cacert_path = Path(ssl_config["ca_cert_file"])
     if cacert_path.exists():
         logger.debug(f"Loading CA certificate {cacert_path}")
         ssl_context.load_verify_locations(cacert_path)
@@ -34,13 +34,18 @@ def make_ssl_context(path: Path) -> ssl.SSLContext | None:
             ssl_context.verify_mode = ssl.CERT_OPTIONAL
         ssl_context.load_default_certs()
 
-    logger.info("Check hostname: %s, server verify mode: %s",
-                ssl_context.check_hostname, ssl_context.verify_mode)
+    logger.info(
+        "Check hostname: %s, server verify mode: %s",
+        ssl_context.check_hostname,
+        ssl_context.verify_mode,
+    )
 
     logger.debug("Loading client certificate and key")
-    ssl_context.load_cert_chain(certfile=path / "loader-cert.pem",
-                                keyfile=path / "loader-priv-key.pem",
-                                password=password_loader(path / "key-password.txt"))
+    ssl_context.load_cert_chain(
+        certfile=Path(ssl_config["cert_file"]),
+        keyfile=Path(ssl_config["private_key_file"]),
+        password=password_loader(Path(ssl_config["private_key_password_file"])),
+    )
 
     return ssl_context
 

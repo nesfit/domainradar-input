@@ -70,7 +70,16 @@ def main():
 def init_config() -> dict:
     config = {
         "kafka_broker": os.environ.get("DOMAINRADAR_KAFKA_BROKER_URL", ""),
-        "kafka_secrets_dir": os.environ.get("DOMAINRADAR_KAFKA_SECRETS_DIR", ""),
+        "kafka_secrets": {
+            "ca_cert_file": os.environ.get("DOMAINRADAR_KAFKA_SECRETS_CA_CERT_FILE", ""),
+            "cert_file": os.environ.get("DOMAINRADAR_KAFKA_SECRETS_CERT_FILE", ""),
+            "private_key_file": os.environ.get(
+                "DOMAINRADAR_KAFKA_SECRETS_PRIVATE_KEY_FILE", ""
+            ),
+            "private_key_password_file": os.environ.get(
+                "DOMAINRADAR_KAFKA_SECRETS_PRIVATE_KEY_PASSWORD_FILE", ""
+            ),
+        },
         "dynamic_config": {
             "sources": [],
             "filters": [],
@@ -83,7 +92,7 @@ def init_config() -> dict:
         client_id="loader-consumer-init",
         bootstrap_servers=config["kafka_broker"],
         security_protocol="SSL",
-        ssl_context=make_ssl_context(Path(config["kafka_secrets_dir"])),
+        ssl_context=make_ssl_context(config["kafka_secrets"]),
         auto_offset_reset="earliest",
         consumer_timeout_ms=500,
     )
@@ -109,7 +118,7 @@ def init_config() -> dict:
         client_id="loader-producer",
         bootstrap_servers=config["kafka_broker"],
         security_protocol="SSL",
-        ssl_context=make_ssl_context(Path(config["kafka_secrets_dir"])),
+        ssl_context=make_ssl_context(config["kafka_secrets"]),
     )
 
     if not inited:
@@ -122,7 +131,7 @@ def init_config() -> dict:
         group_id="loader-consumer",
         bootstrap_servers=config["kafka_broker"],
         security_protocol="SSL",
-        ssl_context=make_ssl_context(Path(config["kafka_secrets_dir"])),
+        ssl_context=make_ssl_context(config["kafka_secrets"]),
         consumer_timeout_ms=500,
     )
 

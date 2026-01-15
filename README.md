@@ -16,11 +16,11 @@ The main loop is preceded by an initialization phase where the application confi
 
 Set the following **environment variables** before running the Loader:
 - `DOMAINRADAR_KAFKA_BROKER_URL`: URL of the Kafka broker.
-- `DOMAINRADAR_KAFKA_SECRETS_DIR`: Path to a directory that contains the following authentication files:
-    - `ca-cert.pem`: CA certificate of the issuer of the client certificates.
-    - `loader-cert.pem`: Client certificate for authenticating the Loader at Kafka.
-    - `loader-priv-key.pem`: Private key matching the public key in the client certificate.
-    - `key-password.txt`: Password for unlocking the encrypted private key.
+- The following Kafka authentication files:
+    - `DOMAINRADAR_KAFKA_SECRETS_CA_CERT_FILE`: CA certificate of the issuer of the client certificates.
+    - `DOMAINRADAR_KAFKA_SECRETS_CERT_FILE`: Client certificate for authenticating the Loader at Kafka.
+    - `DOMAINRADAR_KAFKA_SECRETS_PRIVATE_KEY_FILE`: Private key matching the public key in the client certificate.
+    - `DOMAINRADAR_KAFKA_SECRETS_PRIVATE_KEY_PASSWORD_FILE`: Password for unlocking the encrypted private key.
 
 The main configuration is **dynamically loaded during runtime** from the `configuration_states` Kafka topic. See the [runtime configuration exchange](https://github.com/nesfit/domainradar/blob/main/docs/configuration_exchange.md) documentation for more information. An example of a configuration message is available in `config.example.json`.
 
