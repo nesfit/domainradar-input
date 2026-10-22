@@ -29,9 +29,12 @@ KAFKA_LOG_LEVEL = os.environ.get("DOMAINRADAR_KAFKA_LOG_LEVEL", "WARNING")
 
 
 def main():
-    config = init_config()
+    # before init_config(): everything it logs (which config was loaded, consumer setup,
+    # the first config-change poll) is dropped if logging is configured afterwards
     logging.basicConfig(level=os.environ.get("DOMAINRADAR_LOG_LEVEL", "INFO"))
     logging.getLogger("kafka").setLevel(KAFKA_LOG_LEVEL)
+
+    config = init_config()
 
     sources, filters, outputs, pending = create_app(config)
 
