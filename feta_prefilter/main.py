@@ -20,10 +20,18 @@ logger = logging.getLogger(__name__)
 INIT_RETRY_DELAYS = (5, 15, 45, 120, 300)
 IDLE_SLEEP = 1.0
 
+# Bounded reads from the Kafka consumers. Iterating a consumer directly is unbounded: a
+# coordinator/rebalance storm kept update_config() inside the loop while kafka-python
+# re-logged every retry (528k lines / 100 MB in 90 s, no MISP request during it).
+CONFIG_POLL_TIMEOUT_MS = 500
+CONFIG_POLL_MAX_RECORDS = 100
+KAFKA_LOG_LEVEL = os.environ.get("DOMAINRADAR_KAFKA_LOG_LEVEL", "WARNING")
+
 
 def main():
     config = init_config()
     logging.basicConfig(level=os.environ.get("DOMAINRADAR_LOG_LEVEL", "INFO"))
+    logging.getLogger("kafka").setLevel(KAFKA_LOG_LEVEL)
 
     sources, filters, outputs, pending = create_app(config)
 
@@ -122,22 +130,27 @@ def init_config() -> dict:
         consumer_timeout_ms=500,
     )
     inited = False
-    for msg in init_consumer:
-        logger.debug(msg)
+    while True:
+        messages = poll_messages(init_consumer)
+        if not messages:
+            break
 
-        try:
-            if msg.key.decode() != "loader":
+        for msg in messages:
+            logger.debug(msg)
+
+            try:
+                if msg.key.decode() != "loader":
+                    continue
+
+                state = json.loads(msg.value)
+            except (AttributeError, UnicodeDecodeError, JSONDecodeError):
                 continue
 
-            state = json.loads(msg.value)
-        except (AttributeError, UnicodeDecodeError, JSONDecodeError):
-            continue
-
-        if not state["success"]:
-            continue
-        logger.info(state)
-        config["dynamic_config"] = state["currentConfig"]
-        inited = True
+            if not state["success"]:
+                continue
+            logger.info("Config loaded: %s", describe_config(state["currentConfig"]))
+            config["dynamic_config"] = state["currentConfig"]
+            inited = True
 
     config["kafka_producer"] = KafkaProducer(
         client_id="loader-producer",
@@ -167,7 +180,7 @@ def init_config() -> dict:
 def update_config(config: dict) -> bool:
     changed = False
     consumer = config["kafka_consumer"]
-    for msg in consumer:
+    for msg in poll_messages(consumer):
         logger.debug(msg)
         if msg.key is None:
             continue
@@ -186,7 +199,7 @@ def update_config(config: dict) -> bool:
             notify_config_change(False, config, str(e))
             continue
 
-        logger.info(f"Change request received: {change_request}")
+        logger.info("Change request received: %s", describe_config(change_request))
         if validate_dynamic_config(change_request):
             config["dynamic_config"] = change_request
             success = True
@@ -316,6 +329,29 @@ def retry_pending(pending: list[PendingBlock]) -> list[PendingBlock]:
     return still_pending
 
 
+def describe_config(config: dict) -> str:
+    """Block types only - the whole payload carries MISP keys and API tokens."""
+
+    def describe(blocks: list[dict]) -> list[str]:
+        return [block.get("type", "?") for block in blocks]
+
+    return "sources=%s filters=%s outputs=%s" % (
+        describe(config.get("sources", [])),
+        describe(config.get("filters", [])),
+        describe(config.get("outputs", [])),
+    )
+
+
+def poll_messages(
+    consumer,
+    timeout_ms: int = CONFIG_POLL_TIMEOUT_MS,
+    max_records: int = CONFIG_POLL_MAX_RECORDS,
+) -> list:
+    """Bounded read from a KafkaConsumer, returns the polled records as a flat list."""
+    batch = consumer.poll(timeout_ms=timeout_ms, max_records=max_records)
+    return [record for records in batch.values() for record in records]
+
+
 def validate_dynamic_config(change_request):
     try:
         for src in change_request["sources"]:
@@ -325,7 +361,10 @@ def validate_dynamic_config(change_request):
         for output in change_request["outputs"]:
             validate_config_block(output)
     except:
-        logger.exception(f"Failed validation of config change request {change_request}")
+        logger.exception(
+            "Failed validation of config change request %s",
+            filter_credentials(change_request),
+        )
         return False
 
     return True
