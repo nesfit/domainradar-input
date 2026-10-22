@@ -1,9 +1,8 @@
 from urllib.parse import urlparse
 
-from pymisp import PyMISP
-
 from feta_prefilter.Filters.BaseFilter import FilterAction
 from feta_prefilter.Filters.BaseFilter import BaseFilter
+from feta_prefilter.utils import misp_client
 
 class MISPFilter(BaseFilter):
     def __init__(
@@ -12,11 +11,14 @@ class MISPFilter(BaseFilter):
         misp_url: str,
         misp_key: str,
         misp_feed_eventids: list[int],
+        misp_ssl: bool | str = True,
+        misp_timeout_s: float = 30.0,
         filter_result_action=FilterAction.DROP,
     ):
         super().__init__(filter_name, filter_result_action)
 
-        self.misp = PyMISP(misp_url, misp_key, ssl=False)
+        # a hanging instance must not block the block initialisation forever
+        self.misp = misp_client(misp_url, misp_key, misp_ssl, timeout=misp_timeout_s)
         attributes = self.misp.search(
             controller="attributes", to_ids=True, eventid=misp_feed_eventids, pythonify=True
         )

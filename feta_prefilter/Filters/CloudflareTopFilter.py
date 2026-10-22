@@ -8,6 +8,10 @@ from feta_prefilter.Filters.BaseFilter import BaseFilter, FilterAction
 
 logger = logging.getLogger(__name__)
 
+# A failed fetch used to leave _last_fetch at 0, so _ensure_fresh() retried on every
+# filter() call, i.e. a few times per second against the Cloudflare API.
+FETCH_RETRY_DELAY_S = 300
+
 
 class CloudflareTopFilter(BaseFilter):
     """Filter using Cloudflare Radar Top domains."""
@@ -61,8 +65,12 @@ class CloudflareTopFilter(BaseFilter):
                     self.suffix_trie.add(reversed_domain.lower())
                 self._last_fetch = time.time()
                 logger.info("Loaded %d domains from Cloudflare Radar", len(domains))
-        except Exception as e:  # pylint: disable=broad-except
-            logger.exception("Failed to fetch domains from Cloudflare Radar", exc_info=e)
+        except Exception:  # pylint: disable=broad-except
+            self._last_fetch = time.time() - self.cache_time + FETCH_RETRY_DELAY_S
+            logger.exception(
+                "Failed to fetch domains from Cloudflare Radar, retrying in %ds",
+                FETCH_RETRY_DELAY_S,
+            )
 
     def _ensure_fresh(self) -> None:
         if time.time() - self._last_fetch > self.cache_time:

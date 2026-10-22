@@ -1,6 +1,10 @@
 import logging
 import ssl
+import warnings
 from pathlib import Path
+
+import urllib3
+from pymisp import PyMISP
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +52,33 @@ def make_ssl_context(ssl_config: dict[str, str]) -> ssl.SSLContext | None:
     )
 
     return ssl_context
+
+
+def misp_client(
+    misp_url: str,
+    misp_key: str,
+    misp_ssl: bool | str = True,
+    timeout: float | None = None,
+) -> PyMISP:
+    """Creates a PyMISP client that verifies the instance certificate by default.
+
+    misp_ssl is passed straight to PyMISP: True = verify against the system CA store,
+    a string = path to a CA bundle, False = no verification. requests installs an
+    "always" filter for urllib3.SecurityWarning, so an unverified request logs a
+    two-line warning on every call (that was ~100 % of the loader log); an explicit
+    opt-out is therefore announced once and the warning is suppressed after that.
+    """
+    if misp_ssl is False:
+        logger.warning(
+            "TLS certificate verification disabled for MISP instance %s (misp_ssl=False),"
+            " suppressing urllib3 InsecureRequestWarning",
+            misp_url,
+        )
+        warnings.filterwarnings(
+            "ignore", category=urllib3.exceptions.InsecureRequestWarning
+        )
+
+    return PyMISP(misp_url, misp_key, ssl=misp_ssl, timeout=timeout)
 
 
 def filter_credentials(config_section):
