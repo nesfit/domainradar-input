@@ -24,6 +24,10 @@ requests = "^2.32.4"
 [tool.poetry.group.dev.dependencies]
 black = "*"
 mypy = "*"
+pytest = "^8.0"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [build-system]
 requires = ["poetry-core"]

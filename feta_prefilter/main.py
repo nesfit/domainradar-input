@@ -11,6 +11,8 @@ from feta_prefilter.Filters import filter_classes
 from feta_prefilter.Filters.BaseFilter import FilterAction
 from feta_prefilter.Outputs import output_classes
 from feta_prefilter.Sources import source_classes
+from feta_prefilter.domain import canonical_domain
+from feta_prefilter.origins import normalize_origin, origin_key
 from feta_prefilter.utils import make_ssl_context, filter_credentials
 
 logger = logging.getLogger(__name__)
@@ -52,48 +54,8 @@ def main():
             logger.error("No sources initialized, idle until one initializes")
             idle_warned = True
 
-        domains = set()
-        for s in sources:
-            try:
-                domains.update(d.lower() for d in s.collect())
-            except Exception as e:
-                logger.warning(
-                    f"Source {type(s).__name__} failed to collect: {type(e).__name__}: {e}"
-                )
-
-        filter_results = {}
-        for f in filters:
-            filter_results[f] = f.filter(domains)
-        ###
-        # filter_results[f1] = [PASS, DROP, PASS...]
-        # filter_results[f2] = [DROP, PASS, PASS...]
-
-        ###
-        # transform into:
-        # [
-        #   { domain, f_results= {f1: PASS, f2: DROP} }
-        #   { domain, f_results= {f1: DROP, f2: PASS} }
-        #   { domain, f_results= {f1: PASS, f2: PASS} }
-        # ]
-        filtered_domains = []
-        for i, domain in enumerate(domains):
-            domain_results = {
-                f.filter_name: filter_results[f][i]
-                for f in filter_results.keys()
-            }
-            max_domain_result = max(domain_results.values(), default=FilterAction.PASS)
-            if max_domain_result == FilterAction.DROP:
-                continue
-            elif max_domain_result == FilterAction.STORE:
-                filtered_domains.append({"domain": domain, "f_results": domain_results})
-            else:
-                # if all are PASS-analyze, then we don't need to store the json
-                filtered_domains.append(
-                    {
-                        "domain": domain,
-                        "f_results": {},
-                    }
-                )
+        domains = collect_origins(sources)
+        filtered_domains = filter_domains(domains, filters)
 
         for o in outputs:
             o.output(filtered_domains)
@@ -101,6 +63,61 @@ def main():
         if not sources or pending:
             # nothing to collect or waiting for an init retry, don't spin
             time.sleep(IDLE_SLEEP)
+
+
+def collect_origins(sources) -> dict[str, dict[tuple[str, str], dict]]:
+    """Collect every source into canonical domain -> {origin key: origin}.
+
+    A domain seen by several sources keeps one origin per source, and the same attribute
+    seen twice is deduplicated on its registry identity. Domains without a known origin
+    are collected too - the registry simply has nothing to say about them.
+    """
+    domains: dict[str, dict[tuple[str, str], dict]] = {}
+    for s in sources:
+        try:
+            for raw_domain, raw_origin in s.collect_with_origin():
+                domain = canonical_domain(raw_domain)
+                if not domain:
+                    continue
+                origins = domains.setdefault(domain, {})
+                origin = normalize_origin(raw_origin)
+                if origin is not None:
+                    origins[origin_key(origin)] = origin
+        except Exception as e:
+            logger.warning(
+                f"Source {type(s).__name__} failed to collect: {type(e).__name__}: {e}"
+            )
+    return domains
+
+
+def filter_domains(
+    domains: dict[str, dict[tuple[str, str], dict]], filters
+) -> list[dict]:
+    """Filter the domains and build the per-domain output entries.
+
+    The filters get the domain list in the same order their actions are returned in; the
+    entries stay ``{domain, f_results, origins}`` - ``f_results`` is empty for domains
+    that go straight to analysis and holds the per-filter actions for STORE domains.
+    """
+    domain_list = list(domains)
+    filter_results = {f: f.filter(domain_list) for f in filters}
+
+    filtered_domains = []
+    for i, domain in enumerate(domain_list):
+        domain_results = {
+            f.filter_name: filter_results[f][i] for f in filter_results.keys()
+        }
+        max_domain_result = max(domain_results.values(), default=FilterAction.PASS)
+        if max_domain_result == FilterAction.DROP:
+            continue
+        if max_domain_result == FilterAction.STORE:
+            # the domain is stored but not analysed, so the filter results are kept
+            entry = {"domain": domain, "f_results": domain_results}
+        else:
+            entry = {"domain": domain, "f_results": {}}
+        entry["origins"] = list(domains[domain].values())
+        filtered_domains.append(entry)
+    return filtered_domains
 
 
 def init_config() -> dict:
@@ -230,6 +247,15 @@ def notify_config_change(success: bool, config: dict, message: str = None):
     return
 
 
+def instantiate(block: dict, registry: dict):
+    """Build one configured block and attach its optional ``origin`` identity."""
+    obj = registry[block["type"]](*block["args"], **block["kwargs"])
+    origin = block.get("origin")
+    if origin is not None:
+        obj.origin = origin
+    return obj
+
+
 def create_app(config: dict):
     def _init_block(blocks, registry, label: str):
         items = []
@@ -241,8 +267,7 @@ def create_app(config: dict):
                 continue
 
             try:
-                cls = registry[cls_name]
-                obj = cls(*blk["args"], **blk["kwargs"])
+                obj = instantiate(blk, registry)
             except Exception as e:
                 logger.warning(
                     f"Failed {label} initialization, retrying later: {type(e).__name__}: {e}"
@@ -306,7 +331,7 @@ class PendingBlock:
             return True
 
         try:
-            obj = cls(*self.block["args"], **self.block["kwargs"])
+            obj = instantiate(self.block, self.registry)
         except Exception as e:
             self.attempts += 1
             delay = self.next_delay()
@@ -377,6 +402,19 @@ def validate_config_block(block: dict):
     block["type"]
     block["args"]
     block["kwargs"]
+
+    # optional provenance identity; a source without it still collects domains, the
+    # registry just gets no row for them
+    origin = block.get("origin")
+    if origin is None:
+        return
+    if not isinstance(origin, dict):
+        raise ValueError("origin must be an object")
+    if origin.get("sourceId") is not None and not isinstance(origin["sourceId"], str):
+        raise ValueError("origin.sourceId must be a string")
+    for key in ("feedEventIds", "feedThreatTypes"):
+        if origin.get(key) is not None and not isinstance(origin[key], dict):
+            raise ValueError(f"origin.{key} must be an object")
 
 
 if __name__ == "__main__":

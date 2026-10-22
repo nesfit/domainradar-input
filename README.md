@@ -30,6 +30,7 @@ The main configuration is **dynamically loaded during runtime** from the `config
 
 Input modules load domain names from various sources. To add an input module, implement a class deriving from `feta_prefilter.Sources.BaseSource.BaseSource` with the method:
 - `collect(self) -> list[str]`: Returns a list of domain names for processing.
+- `collect_with_origin(self)` (optional): Returns `(domain, origin)` pairs. The default implementation wraps `collect()` and attaches the source's `origin` block (see *Domain Provenance* below).
 
 ### Filter Modules
 
@@ -45,11 +46,21 @@ To add a filter, implement a class deriving from `feta_prefilter.Filters.BaseFil
 
 Output modules send filtered results to the appropriate destinations. To add an output module, implement a class deriving from `feta_prefilter.Outputs.BaseOutput.BaseOutput` that implements:
   - `__init__(self)`: Initializes connections to output destinations.
-  - `output(self, domains: list[dict])`: outputs filtered data. The `domains` argument contains a list of objects with the domain name and results of the individual filters:
+  - `output(self, domains: list[dict])`: outputs filtered data. The `domains` argument contains a list of objects with the domain name, the results of the individual filters and what is known about where the domain came from:
 ```python
-{ domain="domain name", f_results= {"filter1": PASS, "filter2": DROP} }
+{ domain="domain name", f_results= {"filter1": PASS, "filter2": DROP}, origins= [...] }
 ```
 
+
+## Domain Provenance
+
+Every domain carries where it came from - the source instance and feed, the threat type if
+the feed has one, and the identity of the source record. A source declares its identity in
+an optional `origin` block; the loader canonicalizes the domain and writes one row per
+domain x source x record into `domain_origin`, from where a separate Kafka Connect pipeline
+carries it to MongoDB. The collector pipeline is not touched.
+
+Fields, examples and the recorded shape: `docs/domain-provenance.md`.
 
 ## Usage
 
