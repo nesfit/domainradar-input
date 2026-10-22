@@ -14,6 +14,19 @@
                 "misp_url": "https://example.com/",
                 "misp_key": "password",
                 "misp_feed_eventids": []
+            },
+            "origin": {
+                "sourceType": "misp",
+                "sourceId": "misp:example",
+                "sourceUrl": "https://example.com/",
+                "feedEventIds": {
+                    "1": "phishtank",
+                    "3": "openphish"
+                },
+                "feedThreatTypes": {
+                    "phishtank": "phishing",
+                    "openphish": "phishing"
+                }
             }
         }
     ],
